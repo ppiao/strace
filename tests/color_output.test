@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Check -H option
+
+. "${srcdir=.}/init.sh"
+
+try_run_prog "./fork-f" && {
+	run_strace -H -a26 -qq -f -echdir -e signal=none ./fork-f > "$EXP"
+	match_diff "$LOG" "$EXP"
+}
+
+try_run_prog "./vfork-f" && {
+	run_strace -H -a26 -qq -f -echdir -e signal=none ./vfork-f > "$EXP"
+	match_diff "$LOG" "$EXP"
+}
+
+rm "$EXP"

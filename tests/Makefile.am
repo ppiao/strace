@@ -508,6 +508,7 @@ DECODER_TESTS = \
 	clock_adjtime.test \
 	clock_nanosleep.test \
 	clock_xettime.test \
+	color_output.test \
 	copy_file_range.test \
 	creat.test \
 	delete_module.test \
