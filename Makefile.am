@@ -96,6 +96,7 @@ strace_SOURCES =	\
 	chdir.c		\
 	chmod.c		\
 	clone.c		\
+	color.h		\
 	copy_file_range.c \
 	count.c		\
 	defs.h		\

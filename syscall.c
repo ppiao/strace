@@ -650,7 +650,9 @@ trace_syscall_entering(struct tcb *tcp, unsigned int *sig)
 
 	if (res != 1) {
 		printleader(tcp);
-		tprintf("%s(", scno_good == 1 ? tcp->s_ent->sys_name : "????");
+		color_tprintf(COLOR_SYS_NAME, "%s", scno_good == 1 ?
+			      tcp->s_ent->sys_name : "????");
+		tprints("(");
 		/*
 		 * " <unavailable>" will be added later by the code which
 		 * detects ptrace errors.
@@ -724,7 +726,8 @@ trace_syscall_entering(struct tcb *tcp, unsigned int *sig)
 #endif
 
 	printleader(tcp);
-	tprintf("%s(", tcp->s_ent->sys_name);
+	color_tprintf(COLOR_SYS_NAME, "%s", tcp->s_ent->sys_name);
+	tprints("(");
 	if (tcp->qual_flg & QUAL_RAW)
 		res = printargs(tcp);
 	else
@@ -804,7 +807,9 @@ trace_syscall_exiting(struct tcb *tcp)
 		/* There was error in one of prior ptrace ops */
 		tprints(") ");
 		tabto();
-		tprints("= ? <unavailable>\n");
+		tprints("= ");
+		color_tprints(COLOR_RETURN_VALUE, "?");
+		tprints(" <unavailable>\n");
 		line_ended();
 		tcp->flags &= ~(TCB_INSYSCALL | TCB_TAMPERED);
 		tcp->sys_func_rval = 0;
@@ -837,11 +842,14 @@ trace_syscall_exiting(struct tcb *tcp)
 	tabto();
 	u_error = tcp->u_error;
 
+	tprints("= ");
 	if (tcp->qual_flg & QUAL_RAW) {
 		if (u_error) {
-			tprintf("= -1 (errno %lu)", u_error);
+			color_tprintf(COLOR_ERROR_MSG,
+				      "-1 (errno %lu)", u_error);
 		} else {
-			tprintf("= %#" PRI_klx, tcp->u_rval);
+			color_tprintf(COLOR_RETURN_VALUE,
+				      "%#" PRI_klx, tcp->u_rval);
 		}
 		if (syscall_tampered(tcp))
 			tprints(" (INJECTED)");
@@ -869,13 +877,15 @@ trace_syscall_exiting(struct tcb *tcp)
 			 * The system call will be restarted with the same arguments
 			 * if SA_RESTART is set; otherwise, it will fail with EINTR.
 			 */
-			tprints("= ? ERESTARTSYS (To be restarted if SA_RESTART is set)");
+			color_tprints(COLOR_ERROR_MSG,
+				      "? ERESTARTSYS (To be restarted if SA_RESTART is set)");
 			break;
 		case ERESTARTNOINTR:
 			/* Rare. For example, fork() returns this if interrupted.
 			 * SA_RESTART is ignored (assumed set): the restart is unconditional.
 			 */
-			tprints("= ? ERESTARTNOINTR (To be restarted)");
+			color_tprints(COLOR_ERROR_MSG,
+				      "? ERESTARTNOINTR (To be restarted)");
 			break;
 		case ERESTARTNOHAND:
 			/* pause(), rt_sigsuspend() etc use this code.
@@ -885,7 +895,8 @@ trace_syscall_exiting(struct tcb *tcp)
 			 * after SIG_IGN or SIG_DFL signal it will restart
 			 * (thus the name "restart only if has no handler").
 			 */
-			tprints("= ? ERESTARTNOHAND (To be restarted if no handler)");
+			color_tprints(COLOR_ERROR_MSG,
+				      "? ERESTARTNOHAND (To be restarted if no handler)");
 			break;
 		case ERESTART_RESTARTBLOCK:
 			/* Syscalls like nanosleep(), poll() which can't be
@@ -899,15 +910,16 @@ trace_syscall_exiting(struct tcb *tcp)
 			 * which in turn saves another such restart block,
 			 * old data is lost and restart becomes impossible)
 			 */
-			tprints("= ? ERESTART_RESTARTBLOCK (Interrupted by signal)");
+			color_tprints(COLOR_ERROR_MSG,
+				      "? ERESTART_RESTARTBLOCK (Interrupted by signal)");
 			break;
 		default:
 			u_error_str = err_name(u_error);
 			if (u_error_str)
-				tprintf("= -1 %s (%s)",
+				color_tprintf(COLOR_ERROR_MSG, "-1 %s (%s)",
 					u_error_str, strerror(u_error));
 			else
-				tprintf("= -1 %lu (%s)",
+				color_tprintf(COLOR_ERROR_MSG, "-1 %lu (%s)",
 					u_error, strerror(u_error));
 			break;
 		}
@@ -918,45 +930,48 @@ trace_syscall_exiting(struct tcb *tcp)
 	}
 	else {
 		if (sys_res & RVAL_NONE)
-			tprints("= ?");
+			color_tprints(COLOR_RETURN_VALUE, "?");
 		else {
 			switch (sys_res & RVAL_MASK) {
 			case RVAL_HEX:
 #if ANY_WORDSIZE_LESS_THAN_KERNEL_LONG
 				if (current_wordsize < sizeof(tcp->u_rval)) {
-					tprintf("= %#x",
+					color_tprintf(COLOR_RETURN_VALUE, "%#x",
 						(unsigned int) tcp->u_rval);
 				} else
 #endif
 				{
-					tprintf("= %#" PRI_klx, tcp->u_rval);
+					color_tprintf(COLOR_RETURN_VALUE,
+						      "%#" PRI_klx, tcp->u_rval);
 				}
 				break;
 			case RVAL_OCTAL:
-				tprints("= ");
-				print_numeric_long_umask(tcp->u_rval);
+				color_tprintf(COLOR_RETURN_VALUE,
+					      "%#03lo", (unsigned long) tcp->u_rval);
 				break;
 			case RVAL_UDECIMAL:
 #if ANY_WORDSIZE_LESS_THAN_KERNEL_LONG
 				if (current_wordsize < sizeof(tcp->u_rval)) {
-					tprintf("= %u",
+					color_tprintf(COLOR_RETURN_VALUE, "%u",
 						(unsigned int) tcp->u_rval);
 				} else
 #endif
 				{
-					tprintf("= %" PRI_klu, tcp->u_rval);
+					color_tprintf(COLOR_RETURN_VALUE,
+						      "%" PRI_klu, tcp->u_rval);
 				}
 				break;
 			case RVAL_DECIMAL:
-				tprintf("= %" PRI_kld, tcp->u_rval);
+				color_tprintf(COLOR_RETURN_VALUE,
+					      "%" PRI_kld, tcp->u_rval);
 				break;
 			case RVAL_FD:
 				if (show_fd_path) {
-					tprints("= ");
 					printfd(tcp, tcp->u_rval);
 				}
 				else
-					tprintf("= %" PRI_kld, tcp->u_rval);
+					color_tprintf(COLOR_FD,
+						      "%" PRI_kld, tcp->u_rval);
 				break;
 			default:
 				error_msg("invalid rval format");

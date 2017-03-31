@@ -744,6 +744,20 @@ extern void tabto(void);
 extern void tprintf(const char *fmt, ...) ATTRIBUTE_FORMAT((printf, 1, 2));
 extern void tprints(const char *str);
 
+enum color_attr {
+	COLOR_SYS_NAME,
+	COLOR_RETURN_VALUE,
+	COLOR_ERROR_MSG,
+	COLOR_ADDRESS,
+	COLOR_PREFIX_PID,
+	COLOR_FD,
+	COLOR_CLEAR
+};
+
+extern void color_tprintf(enum color_attr attr, const char *fmt, ...)
+	ATTRIBUTE_FORMAT((printf, 2, 3));
+extern void color_tprints(enum color_attr attr, const char *str);
+
 #if SUPPORTED_PERSONALITIES > 1
 extern void set_personality(int personality);
 extern unsigned current_personality;

@@ -44,7 +44,7 @@
 strace \- trace system calls and signals
 .SH SYNOPSIS
 .B strace
-[\fB-CdffhikqrtttTvVxxy\fR]
+[\fB-CdffhHikqrtttTvVxxy\fR]
 [\fB-I\fIn\fR]
 [\fB-b\fIexecve\fR]
 [\fB-e\fIexpr\fR]...
@@ -207,6 +207,9 @@ Here the second argument represents the full set of all signals.
 .TP 12
 .BI "\-a " column
 Align return values in a specific column (default column 40).
+.TP
+.B \-H
+Color output syscall name, return value, error message, fd, address and prefix pid.
 .TP
 .B \-i
 Print the instruction pointer at the time of the system call.

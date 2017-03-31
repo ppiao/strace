@@ -453,9 +453,9 @@ void
 printaddr(const kernel_ulong_t addr)
 {
 	if (!addr)
-		tprints("NULL");
+		color_tprints(COLOR_ADDRESS, "NULL");
 	else
-		tprintf("%#" PRI_klx, addr);
+		color_tprintf(COLOR_ADDRESS, "%#" PRI_klx, addr);
 }
 
 #define DEF_PRINTNUM(name, type) \
@@ -602,7 +602,8 @@ printfd(struct tcb *tcp, int fd)
 		const size_t socket_prefix_len = sizeof(socket_prefix) - 1;
 		const size_t path_len = strlen(path);
 
-		tprintf("%d<", fd);
+		color_tprintf(COLOR_FD, "%d", fd);
+		tprints("<");
 		if (show_fd_path > 1 &&
 		    strncmp(path, socket_prefix, socket_prefix_len) == 0 &&
 		    path[path_len - 1] == ']') {
@@ -621,7 +622,7 @@ printfd(struct tcb *tcp, int fd)
 		}
 		tprints(">");
 	} else
-		tprintf("%d", fd);
+		color_tprintf(COLOR_FD, "%d", fd);
 }
 
 /*

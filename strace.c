@@ -45,6 +45,7 @@
 #endif
 #include <asm/unistd.h>
 
+#include "color.h"
 #include "scno.h"
 #include "ptrace.h"
 #include "printsiginfo.h"
@@ -144,6 +145,7 @@ static char *acolumn_spaces;
 static char *outfname = NULL;
 /* If -ff, points to stderr. Else, it's our common output log */
 static FILE *shared_log;
+static bool color_enabled = false;
 
 struct tcb *printing_tcp = NULL;
 static struct tcb *current_tcp;
@@ -200,7 +202,7 @@ static void
 usage(void)
 {
 	printf("\
-usage: strace [-CdffhiqrtttTvVwxxy] [-I n] [-e expr]...\n\
+usage: strace [-CdffhHiqrtttTvVwxxy] [-I n] [-e expr]...\n\
               [-a column] [-o file] [-s strsize] [-P path]...\n\
               -p pid... / [-D] [-E var=val]... [-u username] PROG [ARGS]\n\
    or: strace -c[dfw] [-I n] [-e expr]... [-O overhead] [-S sortby]\n\
@@ -208,6 +210,7 @@ usage: strace [-CdffhiqrtttTvVwxxy] [-I n] [-e expr]...\n\
 \n\
 Output format:\n\
   -a column      alignment COLUMN for printing syscall results (default %d)\n\
+  -H             color output syscall name, return value, error message, fd, etc.\n\
   -i             print instruction pointer at time of syscall\n\
 "
 #ifdef USE_LIBUNWIND
@@ -592,6 +595,44 @@ tprintf(const char *fmt, ...)
 	va_end(args);
 }
 
+static const char *colors[] = {
+	[COLOR_SYS_NAME]	= C_BROWN,
+	[COLOR_RETURN_VALUE]	= C_CYAN,
+	[COLOR_ERROR_MSG]	= C_RED,
+	[COLOR_ADDRESS]		= C_MAGENTA,
+	[COLOR_PREFIX_PID]	= C_GRAY,
+	[COLOR_FD]		= C_BLUE,
+	[COLOR_CLEAR]		= C_CLEAR
+};
+
+void color_tprints(enum color_attr attr, const char *str)
+{
+	if (color_enabled && isatty(fileno(current_tcp->outf))) {
+		fprintf(current_tcp->outf, "%s", colors[attr]);
+		tprints(str);
+		fprintf(current_tcp->outf, "%s", colors[COLOR_CLEAR]);
+	} else {
+		tprints(str);
+	}
+}
+
+void color_tprintf(enum color_attr attr, const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+
+	if (color_enabled && isatty(fileno(current_tcp->outf))) {
+		fprintf(current_tcp->outf, "%s", colors[attr]);
+		vtprintf(fmt, args);
+		fprintf(current_tcp->outf, "%s", colors[COLOR_CLEAR]);
+	} else {
+		vtprintf(fmt, args);
+	}
+
+	va_end(args);
+}
+
 #ifndef HAVE_FPUTS_UNLOCKED
 # define fputs_unlocked fputs
 #endif
@@ -651,9 +692,9 @@ printleader(struct tcb *tcp)
 	current_tcp->curcol = 0;
 
 	if (print_pid_pfx)
-		tprintf("%-5d ", tcp->pid);
+		color_tprintf(COLOR_PREFIX_PID, "%-5d ", tcp->pid);
 	else if (nprocs > 1 && !outfname)
-		tprintf("[pid %5u] ", tcp->pid);
+		color_tprintf(COLOR_PREFIX_PID, "[pid %5u] ", tcp->pid);
 
 	if (tflag) {
 		char str[sizeof("HH:MM:SS")];
@@ -1612,7 +1653,7 @@ init(int argc, char *argv[])
 #endif
 	qualify("signal=all");
 	while ((c = getopt(argc, argv,
-		"+b:cCdfFhiqrtTvVwxyz"
+		"+b:cCdfFhHiqrtTvVwxyz"
 #ifdef USE_LIBUNWIND
 		"k"
 #endif
@@ -1734,6 +1775,9 @@ init(int argc, char *argv[])
 			opt_intr = string_to_uint_upto(optarg, NUM_INTR_OPTS - 1);
 			if (opt_intr <= 0)
 				error_opt_arg(c, optarg);
+			break;
+		case 'H':
+			color_enabled = true;
 			break;
 		default:
 			error_msg_and_help(NULL);
@@ -2222,7 +2266,8 @@ print_event_exit(struct tcb *tcp)
 	}
 	tprints(") ");
 	tabto();
-	tprints("= ?\n");
+	tprints("= ");
+	color_tprints(COLOR_RETURN_VALUE, "?\n");
 	line_ended();
 }
 
