@@ -127,6 +127,8 @@ bool not_failing_only = 0;
 /* Show path associated with fd arguments */
 unsigned int show_fd_path = 0;
 
+bool tracing_paths = false;
+
 static bool detach_on_execve = 0;
 
 static int exit_code;
@@ -1701,6 +1703,7 @@ init(int argc, char *argv[])
 			process_opt_p_list(optarg);
 			break;
 		case 'P':
+			tracing_paths = true;
 			pathtrace_select(optarg);
 			break;
 		case 's':

@@ -372,8 +372,7 @@ extern unsigned int qflag;
 extern bool not_failing_only;
 extern unsigned int show_fd_path;
 /* are we filtering traces based on paths? */
-extern const char **paths_selected;
-#define tracing_paths (paths_selected != NULL)
+extern bool tracing_paths;
 extern unsigned xflag;
 extern unsigned followfork;
 #ifdef USE_LIBUNWIND

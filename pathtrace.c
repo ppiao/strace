@@ -32,19 +32,23 @@
 
 #include "syscall.h"
 
-const char **paths_selected = NULL;
-static unsigned num_selected = 0;
+struct path_set {
+	const char **paths_selected;
+	unsigned num_selected;
+};
+
+static struct path_set pathtrace_set = { NULL, 0 };
 
 /*
  * Return true if specified path matches one that we're tracing.
  */
 static int
-pathmatch(const char *path)
+pathmatch(const char *path, struct path_set *set)
 {
 	unsigned i;
 
-	for (i = 0; i < num_selected; ++i) {
-		if (strcmp(path, paths_selected[i]) == 0)
+	for (i = 0; i < set->num_selected; ++i) {
+		if (strcmp(path, set->paths_selected[i]) == 0)
 			return 1;
 	}
 	return 0;
@@ -54,24 +58,25 @@ pathmatch(const char *path)
  * Return true if specified path (in user-space) matches.
  */
 static int
-upathmatch(struct tcb *const tcp, const kernel_ulong_t upath)
+upathmatch(struct tcb *const tcp, const kernel_ulong_t upath,
+	   struct path_set *set)
 {
 	char path[PATH_MAX + 1];
 
 	return umovestr(tcp, upath, sizeof path, path) > 0 &&
-		pathmatch(path);
+		pathmatch(path, set);
 }
 
 /*
  * Return true if specified fd maps to a path we're tracing.
  */
 static int
-fdmatch(struct tcb *tcp, int fd)
+fdmatch(struct tcb *tcp, int fd, struct path_set *set)
 {
 	char path[PATH_MAX + 1];
 	int n = getfdpath(tcp, fd, path, sizeof(path));
 
-	return n >= 0 && pathmatch(path);
+	return n >= 0 && pathmatch(path, set);
 }
 
 /*
@@ -79,17 +84,18 @@ fdmatch(struct tcb *tcp, int fd)
  * Specifying NULL will delete all paths.
  */
 static void
-storepath(const char *path)
+storepath(const char *path, struct path_set *set)
 {
 	unsigned i;
 
-	if (pathmatch(path))
+	if (pathmatch(path, set))
 		return; /* already in table */
 
-	i = num_selected++;
-	paths_selected = xreallocarray(paths_selected, num_selected,
-				       sizeof(paths_selected[0]));
-	paths_selected[i] = path;
+	i = set->num_selected++;
+	set->paths_selected = xreallocarray(set->paths_selected,
+					    set->num_selected,
+					    sizeof(set->paths_selected[0]));
+	set->paths_selected[i] = path;
 }
 
 /*
@@ -115,16 +121,12 @@ getfdpath(struct tcb *tcp, int fd, char *buf, unsigned bufsize)
 	return n;
 }
 
-/*
- * Add a path to the set we're tracing.  Also add the canonicalized
- * version of the path.  Secifying NULL will delete all paths.
- */
-void
-pathtrace_select(const char *path)
+static void
+path_select(const char *path, struct path_set *set)
 {
 	char *rpath;
 
-	storepath(path);
+	storepath(path, set);
 
 	rpath = realpath(path, NULL);
 
@@ -138,7 +140,29 @@ pathtrace_select(const char *path)
 	}
 
 	error_msg("Requested path '%s' resolved into '%s'", path, rpath);
-	storepath(rpath);
+	storepath(rpath, set);
+}
+
+/*
+ * Add a path to the set we're tracing.  Also add the canonicalized
+ * version of the path.  Secifying NULL will delete all paths.
+ */
+void
+pathtrace_select(const char *path)
+{
+	path_select(path, &pathtrace_set);
+}
+
+static int
+pathtrace_upathmatch(struct tcb *const tcp, const kernel_ulong_t upath)
+{
+	return upathmatch(tcp, upath, &pathtrace_set);
+}
+
+static int
+pathtrace_fdmatch(struct tcb *tcp, int fd)
+{
+	return fdmatch(tcp, fd, &pathtrace_set);
 }
 
 /*
@@ -168,8 +192,8 @@ pathtrace_match(struct tcb *tcp)
 	case SEN_sendfile64:
 	case SEN_tee:
 		/* fd, fd */
-		return fdmatch(tcp, tcp->u_arg[0]) ||
-			fdmatch(tcp, tcp->u_arg[1]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[0]) ||
+			pathtrace_fdmatch(tcp, tcp->u_arg[1]);
 
 	case SEN_faccessat:
 	case SEN_fchmodat:
@@ -187,28 +211,28 @@ pathtrace_match(struct tcb *tcp)
 	case SEN_unlinkat:
 	case SEN_utimensat:
 		/* fd, path */
-		return fdmatch(tcp, tcp->u_arg[0]) ||
-			upathmatch(tcp, tcp->u_arg[1]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[0]) ||
+			pathtrace_upathmatch(tcp, tcp->u_arg[1]);
 
 	case SEN_link:
 	case SEN_mount:
 	case SEN_pivotroot:
 		/* path, path */
-		return upathmatch(tcp, tcp->u_arg[0]) ||
-			upathmatch(tcp, tcp->u_arg[1]);
+		return pathtrace_upathmatch(tcp, tcp->u_arg[0]) ||
+			pathtrace_upathmatch(tcp, tcp->u_arg[1]);
 
 	case SEN_quotactl:
 		/* x, path */
-		return upathmatch(tcp, tcp->u_arg[1]);
+		return pathtrace_upathmatch(tcp, tcp->u_arg[1]);
 
 	case SEN_linkat:
 	case SEN_renameat2:
 	case SEN_renameat:
 		/* fd, path, fd, path */
-		return fdmatch(tcp, tcp->u_arg[0]) ||
-			fdmatch(tcp, tcp->u_arg[2]) ||
-			upathmatch(tcp, tcp->u_arg[1]) ||
-			upathmatch(tcp, tcp->u_arg[3]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[0]) ||
+			pathtrace_fdmatch(tcp, tcp->u_arg[2]) ||
+			pathtrace_upathmatch(tcp, tcp->u_arg[1]) ||
+			pathtrace_upathmatch(tcp, tcp->u_arg[3]);
 
 	case SEN_old_mmap:
 #if defined(S390)
@@ -219,29 +243,29 @@ pathtrace_match(struct tcb *tcp)
 	case SEN_mmap_pgoff:
 	case SEN_ARCH_mmap:
 		/* x, x, x, x, fd */
-		return fdmatch(tcp, tcp->u_arg[4]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[4]);
 
 	case SEN_symlinkat:
 		/* path, fd, path */
-		return fdmatch(tcp, tcp->u_arg[1]) ||
-			upathmatch(tcp, tcp->u_arg[0]) ||
-			upathmatch(tcp, tcp->u_arg[2]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[1]) ||
+			pathtrace_upathmatch(tcp, tcp->u_arg[0]) ||
+			pathtrace_upathmatch(tcp, tcp->u_arg[2]);
 
 	case SEN_copy_file_range:
 	case SEN_splice:
 		/* fd, x, fd, x, x, x */
-		return fdmatch(tcp, tcp->u_arg[0]) ||
-			fdmatch(tcp, tcp->u_arg[2]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[0]) ||
+			pathtrace_fdmatch(tcp, tcp->u_arg[2]);
 
 	case SEN_epoll_ctl:
 		/* x, x, fd, x */
-		return fdmatch(tcp, tcp->u_arg[2]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[2]);
 
 
 	case SEN_fanotify_mark:
 		/* x, x, x, fd, path */
-		return fdmatch(tcp, tcp->u_arg[3]) ||
-			upathmatch(tcp, tcp->u_arg[4]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[3]) ||
+			pathtrace_upathmatch(tcp, tcp->u_arg[4]);
 
 	case SEN_oldselect:
 	case SEN_pselect6:
@@ -297,7 +321,7 @@ pathtrace_match(struct tcb *tcp)
 				j = next_set_bit(fds, j, nfds);
 				if (j < 0)
 					break;
-				if (fdmatch(tcp, j)) {
+				if (pathtrace_fdmatch(tcp, j)) {
 					free(fds);
 					return 1;
 				}
@@ -324,7 +348,7 @@ pathtrace_match(struct tcb *tcp)
 
 		for (cur = start; cur < end; cur += sizeof(fds))
 			if ((umove(tcp, cur, &fds) == 0)
-			    && fdmatch(tcp, fds.fd))
+			    && pathtrace_fdmatch(tcp, fds.fd))
 				return 1;
 
 		return 0;
@@ -361,10 +385,10 @@ pathtrace_match(struct tcb *tcp)
 	 */
 
 	if (s->sys_flags & TRACE_FILE)
-		return upathmatch(tcp, tcp->u_arg[0]);
+		return pathtrace_upathmatch(tcp, tcp->u_arg[0]);
 
 	if (s->sys_flags & (TRACE_DESC | TRACE_NETWORK))
-		return fdmatch(tcp, tcp->u_arg[0]);
+		return pathtrace_fdmatch(tcp, tcp->u_arg[0]);
 
 	return 0;
 }
