@@ -107,6 +107,8 @@ check_e "invalid descriptor ','" -eread=,
 check_e "invalid descriptor '!'" -ewrite='!'
 check_e "invalid descriptor '!'" -eread='0,!'
 check_e "invalid descriptor '!,'" -ewrite='!,'
+check_e "invalid path ''" -eread=@
+check_e "invalid path ''" -ewrite=@
 
 check_e_using_grep 'regcomp: \+id: [[:alpha:]].+' -e trace='/+id'
 check_e_using_grep 'regcomp: \*id: [[:alpha:]].+' -e trace='/*id'

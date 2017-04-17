@@ -38,6 +38,8 @@ struct path_set {
 };
 
 static struct path_set pathtrace_set = { NULL, 0 };
+static struct path_set readpath_set = { NULL, 0 };
+static struct path_set writepath_set = { NULL, 0 };
 
 /*
  * Return true if specified path matches one that we're tracing.
@@ -124,6 +126,9 @@ getfdpath(struct tcb *tcp, int fd, char *buf, unsigned bufsize)
 static void
 path_select(const char *path, struct path_set *set)
 {
+	if (*path == '\0')
+		error_msg_and_die("invalid path '%s'", path);
+
 	char *rpath;
 
 	storepath(path, set);
@@ -391,4 +396,30 @@ pathtrace_match(struct tcb *tcp)
 		return pathtrace_fdmatch(tcp, tcp->u_arg[0]);
 
 	return 0;
+}
+
+void
+readpath_select(const char *path)
+{
+	path_select(path, &readpath_set);
+}
+
+int
+readpath_match(struct tcb *tcp, int fd)
+{
+	return readpath_set.paths_selected != NULL
+	       && fdmatch(tcp, fd, &readpath_set);
+}
+
+void
+writepath_select(const char *path)
+{
+	path_select(path, &writepath_set);
+}
+
+int
+writepath_match(struct tcb *tcp, int fd)
+{
+	return writepath_set.paths_selected != NULL
+	       && fdmatch(tcp, fd, &writepath_set);
 }

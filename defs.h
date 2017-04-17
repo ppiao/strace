@@ -492,6 +492,10 @@ extern long getrval2(struct tcb *);
 extern const char *signame(const int);
 extern void pathtrace_select(const char *);
 extern int pathtrace_match(struct tcb *);
+extern void readpath_select(const char *);
+extern int readpath_match(struct tcb *, int fd);
+extern void writepath_select(const char *);
+extern int writepath_match(struct tcb *, int fd);
 extern int getfdpath(struct tcb *, int, char *, unsigned);
 extern enum sock_proto getfdproto(struct tcb *, int);
 

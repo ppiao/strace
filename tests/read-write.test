@@ -13,3 +13,7 @@ tmpfile=read-write-tmpfile
 run_strace_match_diff \
 	-a15 -eread=0 -ewrite=1 -e trace=read,write \
 	-P $tmpfile -P /dev/zero -P /dev/null
+run_strace_match_diff \
+	-a15 -eread=@$tmpfile -eread=@/dev/zero \
+	-ewrite=@$tmpfile -ewrite=@/dev/null -e trace=read,write \
+	-P $tmpfile -P /dev/zero -P /dev/null

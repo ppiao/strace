@@ -519,13 +519,19 @@ parse_error:
 static void
 qualify_read(const char *const str)
 {
-	qualify_tokens(str, &read_set, string_to_uint, "descriptor");
+	if (*str == '@')
+		readpath_select(str + 1);
+	else
+		qualify_tokens(str, &read_set, string_to_uint, "descriptor");
 }
 
 static void
 qualify_write(const char *const str)
 {
-	qualify_tokens(str, &write_set, string_to_uint, "descriptor");
+	if (*str == '@')
+		writepath_select(str + 1);
+	else
+		qualify_tokens(str, &write_set, string_to_uint, "descriptor");
 }
 
 static void

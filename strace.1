@@ -481,6 +481,9 @@ Note that this is independent from the normal tracing of the
 system call which is controlled by the option
 .BR -e "\ " trace = read .
 .TP
+\fB\-e\ read\fR=@\,\fIpath\fR
+Perform a full hexadecimal and ASCII dump of all the data read from the path.
+.TP
 \fB\-e\ write\fR=\,\fIset\fR
 Perform a full hexadecimal and ASCII dump of all the data written to
 file descriptors listed in the specified set.  For example, to see
@@ -494,6 +497,9 @@ Note that this is independent from the normal tracing of the
 .BR write (2)
 system call which is controlled by the option
 .BR -e "\ " trace = write .
+.TP
+\fB\-e\ write\fR=@\,\fIpath\fR
+Perform a full hexadecimal and ASCII dump of all the data written to the path.
 .TP
 \fB\-e\ inject\fR=\,\fIset\/\fR[:\fBerror\fR=\,\fIerrno\/\fR|:\fBretval\fR=\,\fIvalue\/\fR][:\fBsignal\fR=\,\fIsig\/\fR][:\fBwhen\fR=\,\fIexpr\/\fR]
 Perform syscall tampering for the specified set of syscalls.

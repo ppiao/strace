@@ -13,6 +13,8 @@ Noteworthy changes in release ?.?? (????-??-??)
     syscalls.
   * Added -e trace=/regex option for filtering syscalls using regular
     expressions.
+  * Added -eread=@path and -ewrite=@path perform a full hexadecimal and ASCII
+    dump of all the data read from/written to the path.
   * Implemented decoding of signal mask in rt_sigreturn syscall on alpha, arc,
     arm, avr32, bfin, cris, hppa, m68k, metag, microblaze, mips, nios2, or1k,
     powerpc, powerpc64, riscv, sh, sh64, sparc, sparc64, tile, x86, and xtensa
