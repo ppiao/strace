@@ -124,6 +124,9 @@ getfdpath(struct tcb *tcp, int fd, char *buf, unsigned bufsize)
 void
 pathtrace_select_set(const char *path, struct path_set *set)
 {
+	if (*path == '\0')
+		error_msg_and_die("Invalid path '%s'", path);
+
 	char *rpath;
 
 	storepath(path, set);
