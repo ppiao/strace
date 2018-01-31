@@ -364,7 +364,7 @@ extern struct path_set {
 	const char **paths_selected;
 	size_t num_selected;
 	size_t size;
-} global_path_set;
+} global_path_set, read_path_set, write_path_set;
 #define tracing_paths (global_path_set.num_selected != 0)
 extern unsigned xflag;
 extern unsigned followfork;

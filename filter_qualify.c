@@ -41,6 +41,9 @@ static struct number_set *raw_set;
 static struct number_set *trace_set;
 static struct number_set *verbose_set;
 
+struct path_set read_path_set;
+struct path_set write_path_set;
+
 static int
 sigstr_to_uint(const char *s)
 {
@@ -173,17 +176,25 @@ parse_inject_expression(char *const str,
 static void
 qualify_read(const char *const str)
 {
-	if (!read_set)
-		read_set = alloc_number_set_array(1);
-	qualify_tokens(str, read_set, string_to_uint, "descriptor");
+	if (*str == '@') {
+		pathtrace_select_set(str + 1, &read_path_set);
+	} else {
+		if (!read_set)
+			read_set = alloc_number_set_array(1);
+		qualify_tokens(str, read_set, string_to_uint, "descriptor");
+	}
 }
 
 static void
 qualify_write(const char *const str)
 {
-	if (!write_set)
-		write_set = alloc_number_set_array(1);
-	qualify_tokens(str, write_set, string_to_uint, "descriptor");
+	if (*str == '@') {
+		pathtrace_select_set(str + 1, &write_path_set);
+	} else {
+		if (!write_set)
+			write_set = alloc_number_set_array(1);
+		qualify_tokens(str, write_set, string_to_uint, "descriptor");
+	}
 }
 
 static void

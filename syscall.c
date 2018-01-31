@@ -438,7 +438,8 @@ dumpio(struct tcb *tcp)
 	if (fd < 0)
 		return;
 
-	if (is_number_in_set(fd, read_set)) {
+	if (is_number_in_set(fd, read_set)
+	    || pathtrace_match_set(tcp, &read_path_set)) {
 		switch (tcp->s_ent->sen) {
 		case SEN_read:
 		case SEN_pread:
@@ -461,7 +462,8 @@ dumpio(struct tcb *tcp)
 			return;
 		}
 	}
-	if (is_number_in_set(fd, write_set)) {
+	if (is_number_in_set(fd, write_set)
+	    || pathtrace_match_set(tcp, &write_path_set)) {
 		switch (tcp->s_ent->sen) {
 		case SEN_write:
 		case SEN_pwrite:
