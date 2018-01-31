@@ -247,6 +247,7 @@ DECODER_TESTS = \
 	prctl-tid_address.test \
 	prctl-tsc.test \
 	qual_fault-exit_group.test \
+	read-write.test \
 	readv.test \
 	rt_sigaction.test \
 	scm_rights-fd.test \
