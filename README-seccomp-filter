@@ -1,0 +1,31 @@
+# How ptrace work with seccomp
+
+(Linux 3.5 to 4.7, exactly before linux kernel commit tags/v4.8-rc1~95^2~119)
+do_syscall:
+	__secure_computing		<--- restart the tracee using PTRACE_SYSCALL
+	....
+	tracehook_report_syscall_entry	<--- strace trace syscall entering
+					     restart the tracee using PTRACE_SYSCALL
+	...
+	do_syscall
+	...
+	tracehook_report_syscall_exit	<--- strace trace syscall exiting
+					     restart the tracee using PTRACE_CONT
+
+(since Linux 4.8)
+do_syscall:
+	tracehook_report_syscall_entry	<--- ignore it, using seccomp stop as
+					     syscall entering
+	....
+	__secure_computing		<--- strace trace syscall entering
+					     restart the tracee using PTRACE_SYSCALL
+	...
+	do_syscall
+	...
+	tracehook_report_syscall_exit	<--- strace trace syscall exiting
+					     restart the tracee using PTRACE_CONT
+
+# Others
+
+This demo only trace execve and open, trace execve for using current code
+handle PTRACE_EVENT_EXEC event.

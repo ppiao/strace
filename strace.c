@@ -50,6 +50,10 @@
 #endif
 #include <asm/unistd.h>
 
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+
 #include "largefile_wrappers.h"
 #include "mmap_cache.h"
 #include "number_set.h"
@@ -84,6 +88,7 @@ const unsigned int syscall_trap_sig = SIGTRAP | 0x80;
 cflag_t cflag = CFLAG_NONE;
 unsigned int followfork;
 unsigned int ptrace_setoptions = PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEEXEC
+				 | PTRACE_O_TRACESECCOMP
 				 | PTRACE_O_TRACEEXIT;
 unsigned int xflag;
 bool debug_flag;
@@ -1164,6 +1169,55 @@ struct exec_params {
 };
 static struct exec_params params_for_tracee;
 
+static void
+init_seccomp_filter(void)
+{
+	/*
+	 * Add filter rule according trace_set
+	 * now simply add open syscall number for test
+	 * trace execve for handle PTRACE_EVENT_EXEC event
+	 */
+	struct sock_filter filter[] = {
+		BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, arch)),
+		BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, AUDIT_ARCH_X86_64, 0, 10),
+
+		BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, nr)),
+
+		/* unistd_64.h:#define __NR_execve 59 */
+		BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, 59, 0, 1),
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE | 59),
+		/* unistd_64.h:#define __NR_open 2 */
+		BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, 2, 0, 1),
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE | 2),
+
+		/* unistd_x32.h: #define __NR_execve (__X32_SYSCALL_BIT + 520) */
+		BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, __X32_SYSCALL_BIT + 520, 0, 1),
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE | (__X32_SYSCALL_BIT + 520)),
+		/* #define __NR_open (__X32_SYSCALL_BIT + 2) */
+		BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, __X32_SYSCALL_BIT + 2, 0, 1),
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE | (__X32_SYSCALL_BIT + 2)),
+
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ALLOW),
+
+		BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, nr)),
+		/* unistd_32.h:#define __NR_execve 11 */
+		BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, 11, 0, 1),
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE | 11),
+		/* unistd_32.h:#define __NR_open 5 */
+		BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, 5, 0, 1),
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE | 5),
+
+		BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ALLOW),
+	};
+	struct sock_fprog prog = {
+		.len = (unsigned short) ARRAY_SIZE(filter),
+		.filter = filter
+	};
+
+	prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog);
+}
+
 static void ATTRIBUTE_NOINLINE ATTRIBUTE_NORETURN
 exec_or_die(void)
 {
@@ -1217,6 +1271,7 @@ exec_or_die(void)
 	if (params_for_tracee.child_sa.sa_handler != SIG_DFL)
 		sigaction(SIGCHLD, &params_for_tracee.child_sa, NULL);
 
+	init_seccomp_filter();
 	execv(params->pathname, params->argv);
 	perror_msg_and_die("exec");
 }
@@ -2371,6 +2426,8 @@ next_event(int *pstatus, siginfo_t *si)
 		return TE_STOP_BEFORE_EXECVE;
 	case PTRACE_EVENT_EXIT:
 		return TE_STOP_BEFORE_EXIT;
+	case PTRACE_EVENT_SECCOMP:
+		return TE_SECCOMP;
 	default:
 		return TE_RESTART;
 	}
@@ -2417,6 +2474,13 @@ dispatch_event(enum trace_event ret, int *pstatus, siginfo_t *si)
 	case TE_RESTART:
 		break;
 
+	case TE_SECCOMP:
+		if (os_release < KERNEL_VERSION(4, 7, 0)) {
+			restart_op = PTRACE_SYSCALL;
+			break;
+		}
+		ATTRIBUTE_FALLTHROUGH;
+
 	case TE_SYSCALL_STOP:
 		if (trace_syscall(current_tcp, &restart_sig) < 0) {
 			/*
@@ -2432,6 +2496,8 @@ dispatch_event(enum trace_event ret, int *pstatus, siginfo_t *si)
 			 */
 			return true;
 		}
+		if (!(current_tcp->flags & TCB_INSYSCALL))
+			restart_op = PTRACE_CONT;
 		break;
 
 	case TE_SIGNAL_DELIVERY_STOP:
