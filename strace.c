@@ -2426,6 +2426,9 @@ next_event(void)
 	case PTRACE_EVENT_EXIT:
 		wd->te = TE_STOP_BEFORE_EXIT;
 		break;
+	case PTRACE_EVENT_SECCOMP:
+		wd->te = TE_SECCOMP;
+		break;
 	default:
 		wd->te = TE_RESTART;
 	}
@@ -2478,6 +2481,9 @@ dispatch_event(const struct tcb_wait_data *wd)
 		return true;
 
 	case TE_RESTART:
+		break;
+
+	case TE_SECCOMP:
 		break;
 
 	case TE_SYSCALL_STOP:
