@@ -2400,6 +2400,8 @@ next_event(int *pstatus, siginfo_t *si)
 		return TE_STOP_BEFORE_EXECVE;
 	case PTRACE_EVENT_EXIT:
 		return TE_STOP_BEFORE_EXIT;
+	case PTRACE_EVENT_SECCOMP:
+		return TE_SECCOMP;
 	default:
 		return TE_RESTART;
 	}
@@ -2444,6 +2446,9 @@ dispatch_event(enum trace_event ret, int *pstatus, siginfo_t *si)
 		return true;
 
 	case TE_RESTART:
+		break;
+
+	case TE_SECCOMP:
 		break;
 
 	case TE_SYSCALL_STOP:
