@@ -672,10 +672,12 @@ syscall_entering_trace(struct tcb *tcp, unsigned int *sig)
 			break;
 	}
 
+#ifndef DEVELOP_SECCOMP_FILTER
 	if (!traced(tcp) || (tracing_paths && !pathtrace_match(tcp))) {
 		tcp->flags |= TCB_FILTERED;
 		return 0;
 	}
+#endif
 
 	tcp->flags &= ~TCB_FILTERED;
 

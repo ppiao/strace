@@ -51,6 +51,7 @@
 #endif
 #include <asm/unistd.h>
 
+#include "filter_seccomp.h"
 #include "largefile_wrappers.h"
 #include "mmap_cache.h"
 #include "number_set.h"
@@ -301,6 +302,14 @@ Startup:\n\
 \n\
 Miscellaneous:\n\
   -d             enable debug output to stderr\n\
+"
+#ifdef USE_SECCOMP_FILTER
+"\
+  -n enable      enable seccomp filtering\n\
+     disable     disable seccomp filtering\n\
+"
+#endif
+"\
   -v             verbose mode: print unabbreviated argv, stat, termios, etc. args\n\
   -h             print help message\n\
   -V             print version\n\
@@ -1217,6 +1226,10 @@ exec_or_die(void)
 	if (params_for_tracee.child_sa.sa_handler != SIG_DFL)
 		sigaction(SIGCHLD, &params_for_tracee.child_sa, NULL);
 
+#ifdef USE_SECCOMP_FILTER
+	if (enable_seccomp_filter)
+		init_seccomp_filter();
+#endif
 	execv(params->pathname, params->argv);
 	perror_msg_and_die("exec");
 }
@@ -1572,6 +1585,9 @@ init(int argc, char *argv[])
 {
 	int c, i;
 	int optF = 0;
+#ifdef USE_SECCOMP_FILTER
+	bool seccomp_opt_set = false;
+#endif
 
 	if (!program_invocation_name || !*program_invocation_name) {
 		static char name[] = "strace";
@@ -1596,6 +1612,9 @@ init(int argc, char *argv[])
 	while ((c = getopt(argc, argv, "+"
 #ifdef ENABLE_STACKTRACE
 	    "k"
+#endif
+#ifdef USE_SECCOMP_FILTER
+	    "n:"
 #endif
 	    "a:Ab:cCdDe:E:fFhiI:o:O:p:P:qrs:S:tTu:vVwxX:yz")) != EOF) {
 		switch (c) {
@@ -1670,6 +1689,9 @@ init(int argc, char *argv[])
 			set_overhead(i);
 			break;
 		case 'p':
+#ifdef USE_SECCOMP_FILTER
+			enable_seccomp_filter = false;
+#endif
 			process_opt_p_list(optarg);
 			break;
 		case 'P':
@@ -1699,6 +1721,17 @@ init(int argc, char *argv[])
 		case 'u':
 			username = optarg;
 			break;
+#ifdef USE_SECCOMP_FILTER
+		case 'n':
+			if (!strcmp(optarg, "enable"))
+				enable_seccomp_filter = true;
+			else if (!strcmp(optarg, "disable"))
+				enable_seccomp_filter = false;
+			else
+				error_opt_arg(c, optarg);
+			seccomp_opt_set = true;
+			break;
+#endif
 		case 'v':
 			qualify("abbrev=none");
 			break;
@@ -1809,6 +1842,20 @@ init(int argc, char *argv[])
 		run_gid = getgid();
 	}
 
+#ifdef USE_SECCOMP_FILTER
+	if (!seccomp_opt_set && followfork)
+		enable_seccomp_filter = true;
+	check_seccomp_filter();
+	if (enable_seccomp_filter)
+		ptrace_setoptions |= PTRACE_O_TRACESECCOMP;
+#endif
+
+#ifdef USE_SECCOMP_FILTER
+	if (enable_seccomp_filter)
+		ptrace_setoptions |= PTRACE_O_TRACECLONE |
+				     PTRACE_O_TRACEFORK |
+				     PTRACE_O_TRACEVFORK;
+#endif
 	if (followfork)
 		ptrace_setoptions |= PTRACE_O_TRACECLONE |
 				     PTRACE_O_TRACEFORK |
@@ -2311,6 +2358,14 @@ next_event(int *pstatus, siginfo_t *si)
 		return TE_NEXT;
 	}
 
+#ifdef USE_SECCOMP_FILTER
+	if (!followfork && enable_seccomp_filter && pid != strace_child) {
+		if (ptrace(PTRACE_CONT, pid, 0, 0) < 0)
+			perror_msg_and_die("ptrace(PTRACE_CONT, %d, ...)", pid);
+		return TE_NEXT;
+	}
+#endif
+
 	if (debug_flag)
 		print_debug_info(pid, status);
 
@@ -2448,8 +2503,14 @@ dispatch_event(enum trace_event ret, int *pstatus, siginfo_t *si)
 	case TE_RESTART:
 		break;
 
+#ifdef USE_SECCOMP_FILTER
 	case TE_SECCOMP:
-		break;
+		if (seccomp_before_ptrace) {
+			restart_op = PTRACE_SYSCALL;
+			break;
+		}
+		ATTRIBUTE_FALLTHROUGH;
+#endif
 
 	case TE_SYSCALL_STOP:
 		if (trace_syscall(current_tcp, &restart_sig) < 0) {
@@ -2466,6 +2527,11 @@ dispatch_event(enum trace_event ret, int *pstatus, siginfo_t *si)
 			 */
 			return true;
 		}
+#ifdef USE_SECCOMP_FILTER
+		if (enable_seccomp_filter
+		    && !(current_tcp->flags & TCB_INSYSCALL))
+			restart_op = PTRACE_CONT;
+#endif
 		break;
 
 	case TE_SIGNAL_DELIVERY_STOP:
